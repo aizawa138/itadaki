@@ -4,16 +4,21 @@
   --color-background: hsl(0 0% 97%);
   --color-foreground: hsl(0 0% 16%);
 
-  --color-primary: hsl(45 100% 56%);
+  --color-primary: hsl(85 49% 63%);
   --color-primary-foreground: hsl(0 0% 16%);
-  --color-primary-hover: hsl(45 100% 46%);
+  --color-primary-hover: hsl(85 49% 53%);
 
-  --color-secondary: hsl(33 100% 50%);
-  --color-secondary-foreground: hsl(0 0% 16%);
-  --color-secondary-hover: hsl(33 100% 40%);
+  --color-secondary: hsl(92 40% 40%);
+  --color-secondary-foreground: hsl(0 0% 9%);
+  --color-secondary-hover: hsl(92 40% 30%);
 
-  --color-accent: hsl(173 80% 40%);
+  --color-tertiary: hsl(98 43% 29%);
+  --color-tertiary-foreground: hsl(0 0% 97%);
+  --color-tertiary-hover: hsl(98 43% 19%);
+
+  --color-accent: hsl(51 98% 68%);
   --color-accent-foreground: hsl(0 0% 16%);
+  --color-accent-hover: hsl(51 98% 58%);
 
   --color-border: hsl(0 0% 87.84%);
   --color-input: hsl(0 0% 61.96%);

@@ -14,6 +14,8 @@ const buttonVariants = cva(
         secondary:
           "bg-secondary text-secondary-foreground shadow hover:bg-secondary-hover",
         ghost: "hover:bg-background/80",
+        accent: "bg-accent text-accent-foreground shadow hover:bg-accent-hover",
+        login: "bg-foreground text-background",
       },
       size: {
         default: "h-9 px-4 py-2",
@@ -34,6 +36,7 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
     asChild?: boolean;
     isLoading?: boolean;
     icon?: React.ReactNode;
+    centerText?: boolean;
   };
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -46,19 +49,25 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       children,
       isLoading,
       icon,
+      centerText = false,
       ...props
     },
     ref,
   ) => {
     const Comp = asChild ? Slot : "button";
+    const showIcon = !isLoading && icon;
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         {...props}
       >
-        {!isLoading && icon && <span className="mr-2">{icon}</span>}
-        <span className="mx-2">{children}</span>
+        {showIcon && <span className="flex items-center">{icon}</span>}
+        {centerText ? (
+          <span className="flex-1 text-center">{children}</span>
+        ) : (
+          <span>{children}</span>
+        )}
       </Comp>
     );
   },
