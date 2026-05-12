@@ -12,8 +12,13 @@
   --color-secondary-foreground: hsl(0 0% 9%);
   --color-secondary-hover: hsl(92 40% 30%);
 
-  --color-accent: hsl(37 79% 64%);
+  --color-tertiary: hsl(98 43% 29%);
+  --color-tertiary-foreground: hsl(0 0% 97%);
+  --color-tertiary-hover: hsl(98 43% 19%);
+
+  --color-accent: hsl(51 98% 68%);
   --color-accent-foreground: hsl(0 0% 16%);
+  --color-accent-hover: hsl(51 98% 58%);
 
   --color-border: hsl(0 0% 87.84%);
   --color-input: hsl(0 0% 61.96%);
