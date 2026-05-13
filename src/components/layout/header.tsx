@@ -1,3 +1,5 @@
+"use client";
+
 import { raleway } from "@/public/fonts";
 import Link from "next/link";
 import {
@@ -10,6 +12,7 @@ import {
 import { Button } from "../ui/button/button";
 import google from "@/public/google-icon-logo-svgrepo-com.svg";
 import Image from "next/image";
+import { signInWithGoogle } from "@/src/lib/auth/sign-in-with-google";
 
 export default function Header() {
   return (
@@ -40,6 +43,7 @@ export default function Header() {
             icon={
               <Image src={google} alt="Google Logo" height={16} width={16} />
             }
+            onClick={signInWithGoogle}
           >
             <span>Continue with Google</span>
           </Button>
