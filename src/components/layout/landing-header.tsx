@@ -22,8 +22,14 @@ export default function LandingHeader() {
         href="/"
         className={`${raleway.className} flex gap-2 text-[1.75rem] text-primary-foreground`}
       >
-        <Image src={logo} alt="Itadaki logo" width={32} height={32} />
-        <span>Itadaki</span>
+        <Image
+          src={logo}
+          alt="Itadaki logo"
+          width={32}
+          height={32}
+          loading="eager"
+        />
+        <h1>Itadaki</h1>
       </Link>
       <Dialog>
         <DialogTrigger asChild>
