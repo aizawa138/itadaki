@@ -1,3 +1,18 @@
+import DashboardContainer from "@/src/components/layout/dashboard-container";
+import { BentoCard } from "@/src/components/ui/bento-card/bento-card";
+
 export default async function Dashboard() {
-  return <div>Dashboard</div>;
+  return (
+    <>
+      <DashboardContainer>
+        <h1 className="mt-10 mb-8 text-2xl">Dashboard</h1>
+        <div className="w-full max-w-5xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 auto-rows-[60px] md:auto-rows-[80px] gap-4 grid-flow-row-dense">
+          <BentoCard title="Today's meal" size="hero"></BentoCard>
+          <BentoCard title="Buy Next" size="square"></BentoCard>
+          <BentoCard title="Recent Receipts" size="wide"></BentoCard>
+          <BentoCard title="Recent Recipes" size="square"></BentoCard>
+        </div>
+      </DashboardContainer>
+    </>
+  );
 }
