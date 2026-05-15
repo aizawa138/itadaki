@@ -11,9 +11,10 @@ const bentoCardVariants = cva(
         skeleton: "",
       },
       size: {
-        hero: "col-span-3 row-span-4",
-        wide: "col-span-3 row-span-2",
-        square: "col-span-2 row-span-3",
+        hero: "col-span-1 sm:col-span-2 lg:col-span-3 row-span-2 sm:row-span-3 lg:row-span-4",
+        wide: "col-span-1 sm:col-span-2 lg:col-span-3 row-span-2",
+        square:
+          "col-span-1 sm:col-span-1 lg:col-span-2 row-span-2 sm:row-span-3",
       },
     },
     defaultVariants: {
@@ -35,7 +36,7 @@ const BentoCard = React.forwardRef<HTMLDivElement, BentoCardProps>(
       ref={ref}
       {...props}
     >
-      <h2 className="absolute bottom-4 left-4 text-2xl">{title}</h2>
+      <h2 className="absolute bottom-6 left-6 text-xl">{title}</h2>
       {children}
     </div>
   ),

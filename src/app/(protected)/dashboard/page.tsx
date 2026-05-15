@@ -5,8 +5,8 @@ export default async function Dashboard() {
   return (
     <>
       <DashboardContainer>
-        <h1 className="mt-10 mb-4 text-2xl">Dashboard</h1>
-        <div className="w-5xl grid grid-cols-5 grid-rows-6 gap-2">
+        <h1 className="mt-10 mb-8 text-2xl">Dashboard</h1>
+        <div className="w-full max-w-5xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 auto-rows-[60px] md:auto-rows-[80px] gap-4 grid-flow-row-dense">
           <BentoCard title="Today's meal" size="hero"></BentoCard>
           <BentoCard title="Buy Next" size="square"></BentoCard>
           <BentoCard title="Recent Receipts" size="wide"></BentoCard>
