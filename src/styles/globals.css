@@ -10,13 +10,13 @@
   --color-primary-foreground: hsl(0 0% 16%);
   --color-primary-hover: hsl(85 49% 53%);
 
-  --color-secondary: hsl(92 40% 40%);
-  --color-secondary-foreground: hsl(0 0% 9%);
-  --color-secondary-hover: hsl(92 40% 30%);
+  --color-secondary: hsl(97 67% 30%);
+  --color-secondary-foreground: hsl(208 20% 97%);
+  --color-secondary-hover: hsl(97 67% 20%);
 
-  --color-tertiary: hsl(98 43% 29%);
+  --color-tertiary: hsl(98 62% 16%);
   --color-tertiary-foreground: hsl(208 20% 97%);
-  --color-tertiary-hover: hsl(98 43% 19%);
+  --color-tertiary-hover: hsl(98 62% 11%);
 
   --color-accent: hsl(51 98% 68%);
   --color-accent-foreground: hsl(0 0% 16%);
