@@ -1,7 +1,9 @@
 @import "tailwindcss";
+@plugin "tailwindcss-animate";
 
 @theme {
   --color-background: hsl(208 20% 97%);
+  --color-background-hover: hsl(208 20% 92%);
   --color-foreground: hsl(0 0% 16%);
 
   --color-primary: hsl(85 49% 63%);
