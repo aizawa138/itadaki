@@ -1,7 +1,6 @@
 import { StaticImageData } from "next/image";
 import Image from "next/image";
 import cn from "@/src/utils/cn";
-import Link from "next/link";
 
 type CreateOptionProps = {
   title: string;
@@ -9,7 +8,6 @@ type CreateOptionProps = {
   src: StaticImageData;
   onClick: () => void;
   className?: string;
-  href: string;
 };
 
 export default function CreateOption({
@@ -18,11 +16,9 @@ export default function CreateOption({
   src,
   onClick,
   className,
-  href,
 }: CreateOptionProps) {
   return (
-    <Link
-      href={href}
+    <div
       className={cn(
         "rounded-xl border border-gray-300 w-full sm:w-1/2 max-w-lg transition hover:cursor-pointer",
         className,
@@ -40,6 +36,6 @@ export default function CreateOption({
         <h2 className="text-lg text-foreground font-semibold mb-1">{title}</h2>
         <p className="text-gray-600 text-xs">{children}</p>
       </div>
-    </Link>
+    </div>
   );
 }

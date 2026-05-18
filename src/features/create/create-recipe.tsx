@@ -12,6 +12,7 @@ import CreateOption from "./create-option";
 import selectReceipt from "@/public/Select Receipt.svg";
 import selectPantry from "@/public/Select Pantry.svg";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function CreateRecipe() {
   const [modeSelected, setModeSelected] = useState(false);
@@ -52,7 +53,6 @@ export default function CreateRecipe() {
         </DialogDescription>
         <div className="flex flex-col sm:flex-row gap-4 mb-4">
           <CreateOption
-            href="/scan"
             src={selectReceipt}
             title="From Receipts"
             onClick={handleReceiptClick}
@@ -62,7 +62,6 @@ export default function CreateRecipe() {
             your receipt will be sent to the pantry to create your recipe.
           </CreateOption>
           <CreateOption
-            href="/pantry"
             src={selectPantry}
             title="From Pantry"
             onClick={handlePantryClick}
@@ -79,7 +78,9 @@ export default function CreateRecipe() {
           className="w-full transition"
           disabled={!modeSelected}
         >
-          Create Recipe
+          <Link href={modeSelected && isReceipt ? "/scan" : "/pantry"}>
+            Create Recipe
+          </Link>
         </Button>
       </DialogContent>
     </Dialog>
