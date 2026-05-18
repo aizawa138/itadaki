@@ -52,6 +52,7 @@ export default function CreateRecipe() {
         </DialogDescription>
         <div className="flex flex-col sm:flex-row gap-4 mb-4">
           <CreateOption
+            href="/scan"
             src={selectReceipt}
             title="From Receipts"
             onClick={handleReceiptClick}
@@ -61,6 +62,7 @@ export default function CreateRecipe() {
             your receipt will be sent to the pantry to create your recipe.
           </CreateOption>
           <CreateOption
+            href="/pantry"
             src={selectPantry}
             title="From Pantry"
             onClick={handlePantryClick}
