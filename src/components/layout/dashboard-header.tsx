@@ -1,6 +1,7 @@
 import Image from "next/image";
 import logo from "@/public/Logo.svg";
 import Link from "next/link";
+import ProfileIcon from "@/src/features/auth/profile-icon";
 
 export default function DashboardHeader() {
   return (
@@ -14,6 +15,7 @@ export default function DashboardHeader() {
           loading="eager"
         />
       </Link>
+      <ProfileIcon />
     </header>
   );
 }
