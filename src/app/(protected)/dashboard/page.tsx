@@ -7,7 +7,7 @@ export default async function Dashboard() {
     <>
       <DashboardContainer>
         <div className="flex justify-between items-center mt-10 mb-6">
-          <h1 className="text-2xl">Dashboard</h1>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
           <CreateRecipe />
         </div>
         <div className="w-full max-w-5xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 auto-rows-[60px] md:auto-rows-[80px] gap-4 grid-flow-row-dense">
