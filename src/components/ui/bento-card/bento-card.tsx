@@ -3,7 +3,7 @@ import cn from "@/src/utils/cn";
 import { cva, VariantProps } from "class-variance-authority";
 
 const bentoCardVariants = cva(
-  "relative rounded-2xl bg-background border border-gray-300",
+  "relative rounded-2xl bg-background border border-gray-300 hover:cursor-pointer",
   {
     variants: {
       variant: {
