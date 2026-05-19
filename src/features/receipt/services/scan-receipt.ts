@@ -1,7 +1,7 @@
 "use server";
 
 import { GoogleGenAI } from "@google/genai";
-import { RECEIPT_PARSE_PROMPT } from "../prompts/prompt";
+import { RECEIPT_PARSE_PROMPT } from "../prompt";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY!,
