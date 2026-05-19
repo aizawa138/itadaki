@@ -1,4 +1,4 @@
-import ScanReceipt from "@/src/features/receipt/scan-receipt";
+import ScanReceipt from "@/src/features/receipt/components/scan-receipt";
 
 export default function Scan() {
   return (
