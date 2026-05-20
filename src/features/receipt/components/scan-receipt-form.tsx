@@ -44,6 +44,12 @@ export default function ScanReceiptForm() {
               <li>- Avoid shadows</li>
               <li>- Use good lighting</li>
               <li>- The app does not store payment info</li>
+              <li>
+                - Must be less than{" "}
+                <b>
+                  <u>5 MB</u>
+                </b>
+              </li>
             </ul>
           </div>
         </div>
