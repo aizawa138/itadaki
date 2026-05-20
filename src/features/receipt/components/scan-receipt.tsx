@@ -26,7 +26,7 @@ export default function ScanReceipt() {
         type="file"
         className={`w-full border border-gray-300 rounded-2xl bg-background text-foreground hover:cursor-pointer text-xl h-100 font-semibold items-center justify-center hidden`}
         required
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
         name="receipt"
         id="receipt"
         capture="environment"
