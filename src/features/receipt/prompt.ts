@@ -19,7 +19,6 @@ RECEIPT RULES
 - Extract total amount
 - Detect currency if possible
 - Extract purchase timestamp
-- Extract all visible OCR text into ocr_raw_text
 - Set ocr_status:
   "success"
   "partial"
@@ -79,8 +78,7 @@ JSON SCHEMA:
     "total_amount": number | null,
     "currency": string | null,
     "purchased_at": string | null,
-    "ocr_status": "success" | "partial" | "failed",
-    "ocr_raw_text": string | null
+    "ocr_status": "success" | "partial" | "failed"
   },
   "receipt_items": [
     {

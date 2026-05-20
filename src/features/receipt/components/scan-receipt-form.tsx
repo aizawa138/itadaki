@@ -1,28 +1,35 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import ScanReceipt from "./scan-receipt";
 import { Button } from "@/src/components/ui/button/button";
 import {
-  handleReceiptAction,
-  type HandleReceiptState,
+  enqueueReceiptScanJobAction,
+  type EnqueueReceiptScanJobState,
 } from "@/src/features/receipt/actions";
 
-const initialState: HandleReceiptState = {
-  receiptId: null,
-  signedUrl: null,
+const initialState: EnqueueReceiptScanJobState = {
+  jobId: null,
   error: null,
 };
 
 export default function ScanReceiptForm() {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(
-    handleReceiptAction,
+    enqueueReceiptScanJobAction,
     initialState,
   );
 
+  useEffect(() => {
+    if (state.jobId) {
+      router.push(`/scan/jobs/${state.jobId}`);
+    }
+  }, [router, state.jobId]);
+
   return (
     <>
-      <form action={formAction}>
+      <form action={formAction} encType="multipart/form-data">
         <div className="grid grid-cols-2 grid-rows-2 gap-8 mb-8">
           <div className="row-span-2">
             <ScanReceipt />
@@ -31,9 +38,9 @@ export default function ScanReceiptForm() {
               <p className="text-sm text-destructive">{state.error}</p>
             ) : null}
 
-            {state.receiptId ? (
+            {state.jobId ? (
               <p className="text-sm text-muted-foreground">
-                Saved. Receipt ID: {state.receiptId}
+                Queued. Job ID: {state.jobId}
               </p>
             ) : null}
           </div>
