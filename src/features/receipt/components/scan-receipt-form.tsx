@@ -29,7 +29,7 @@ export default function ScanReceiptForm() {
 
   return (
     <>
-      <form action={formAction} encType="multipart/form-data">
+      <form action={formAction}>
         <div className="grid grid-cols-2 grid-rows-2 gap-8 mb-8">
           <div className="row-span-2">
             <ScanReceipt />

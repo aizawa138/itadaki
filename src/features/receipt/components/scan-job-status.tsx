@@ -103,11 +103,13 @@ export default function ScanJobStatus({ jobId }: { jobId: string }) {
           src={data.signedUrl}
           alt="Receipt"
           className="w-full rounded-xl"
+          width={100}
+          height={200}
         />
       ) : null}
 
       <div className="flex gap-2">
-        <Button asChild variant="secondary">
+        <Button variant="secondary">
           <Link href="/scan">Scan another</Link>
         </Button>
       </div>
