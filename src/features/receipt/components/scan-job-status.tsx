@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/src/components/ui/button/button";
 import Image from "next/image";
 
@@ -15,16 +15,20 @@ type JobStatusResponse = {
 };
 
 export default function ScanJobStatus({ jobId }: { jobId: string }) {
+  const router = useRouter();
   const [data, setData] = useState<JobStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const controller = new AbortController();
 
-    async function fetchStatus() {
+    async function poll() {
       try {
         const res = await fetch(`/api/receipt-scan-jobs/${jobId}`, {
           cache: "no-store",
+          signal: controller.signal,
         });
 
         if (!res.ok) {
@@ -35,22 +39,28 @@ export default function ScanJobStatus({ jobId }: { jobId: string }) {
         }
 
         const json = (await res.json()) as JobStatusResponse;
-        if (!cancelled) {
-          setData(json);
-          setError(null);
+        if (cancelled) return;
+
+        setData(json);
+        setError(null);
+
+        const terminal = json.status === "done" || json.status === "error";
+        if (!terminal) {
+          timeoutId = setTimeout(poll, 2000);
         }
       } catch (e) {
+        if (cancelled) return;
         const message = e instanceof Error ? e.message : "Failed to load job";
-        if (!cancelled) setError(message);
+        setError(message);
       }
     }
 
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 2000);
+    poll();
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      controller.abort();
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [jobId]);
 
@@ -58,8 +68,8 @@ export default function ScanJobStatus({ jobId }: { jobId: string }) {
     return (
       <div className="space-y-4">
         <p className="text-sm text-destructive">{error}</p>
-        <Button asChild variant="secondary">
-          <Link href="/scan">Back to scan</Link>
+        <Button variant="secondary" onClick={() => router.push("/scan")}>
+          Back to scan
         </Button>
       </div>
     );
@@ -109,8 +119,8 @@ export default function ScanJobStatus({ jobId }: { jobId: string }) {
       ) : null}
 
       <div className="flex gap-2">
-        <Button variant="secondary">
-          <Link href="/scan">Scan another</Link>
+        <Button variant="secondary" onClick={() => router.push("/scan")}>
+          Scan another
         </Button>
       </div>
     </div>
