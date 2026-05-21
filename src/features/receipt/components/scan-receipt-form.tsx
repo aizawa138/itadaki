@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import ScanReceipt from "./scan-receipt";
 import { Button } from "@/src/components/ui/button/button";
@@ -20,12 +20,18 @@ export default function ScanReceiptForm() {
     enqueueReceiptScanJobAction,
     initialState,
   );
+  const hasNavigatedRef = useRef(false);
 
   useEffect(() => {
-    if (state.jobId) {
-      router.push(`/scan/jobs/${state.jobId}`);
-    }
-  }, [router, state.jobId]);
+    if (!state.jobId) return;
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+
+    const params = new URLSearchParams();
+    if (state.error) params.set("enqueueError", state.error);
+    const qs = params.toString();
+    router.push(`/scan/jobs/${state.jobId}${qs ? `?${qs}` : ""}`);
+  }, [router, state.error, state.jobId]);
 
   return (
     <>

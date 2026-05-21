@@ -33,6 +33,14 @@ for each row execute procedure public.set_updated_at();
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on table public.receipt_scan_jobs to authenticated;
 
+-- Worker uses the service role key (bypass RLS but still needs GRANTs)
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table public.receipt_scan_jobs to service_role;
+
+-- Worker also inserts into receipts/receipt_items
+grant select, insert, update, delete on table public.receipts to service_role;
+grant select, insert, update, delete on table public.receipt_items to service_role;
+
 alter table public.receipt_scan_jobs enable row level security;
 
 -- Users can see only their jobs

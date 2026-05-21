@@ -1,6 +1,12 @@
 // Supabase Edge Function: process-receipt-jobs
-// - Picks one queued job
-// - Downloads the image from Storage
+//
+// NOTE: This implementation intentionally avoids external module imports.
+// Remote ESM imports can fail in the Edge runtime and surface as
+// EDGE_FUNCTION_ERROR (500) before the handler runs, preventing useful JSON
+// diagnostics. Using only built-in APIs keeps the function debuggable.
+//
+// - Picks one queued job (or a specific jobId)
+// - Downloads the image from Storage (private bucket)
 // - Calls Gemini to extract JSON
 // - Inserts into receipts + receipt_items
 // - Marks job done/error
@@ -8,14 +14,36 @@
 // Deploy:
 //   supabase functions deploy process-receipt-jobs
 // Secrets required:
-//   supabase secrets set GEMINI_API_KEY=... SUPABASE_SERVICE_ROLE_KEY=...
-
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { jsonrepair } from "https://esm.sh/jsonrepair@3";
-import { GoogleGenAI } from "npm:@google/genai";
+//   supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... GEMINI_API_KEY=...
+// Optional:
+//   supabase secrets set DEBUG=1
 
 const RECEIPT_BUCKET = "receipts";
 const MODEL = "gemini-2.5-flash";
+
+type WorkerRequestBody = { jobId?: string };
+
+type ReceiptScanJob = {
+  id: string;
+  user_id: string;
+  image_path: string;
+  attempt_count: number | null;
+};
+
+type ClaimedJob = {
+  id: string;
+  user_id: string;
+  image_path: string;
+};
+
+type GeminiGenerateContentResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+  error?: { message?: string };
+};
 
 const RECEIPT_PARSE_PROMPT = `Analyze this grocery receipt image.
 
@@ -38,9 +66,9 @@ RECEIPT RULES
 - Detect currency if possible
 - Extract purchase timestamp
 - Set ocr_status:
-  \"success\"
-  \"partial\"
-  \"failed\"
+  "success"
+  "partial"
+  "failed"
 
 ITEM RULES
 
@@ -85,51 +113,63 @@ Final line-item price
 JSON SCHEMA:
 
 {
-  \"receipt\": {
-    \"store_name\": string | null,
-    \"total_amount\": number | null,
-    \"currency\": string | null,
-    \"purchased_at\": string | null,
-    \"ocr_status\": \"success\" | \"partial\" | \"failed\"
+  "receipt": {
+    "store_name": string | null,
+    "total_amount": number | null,
+    "currency": string | null,
+    "purchased_at": string | null,
+    "ocr_status": "success" | "partial" | "failed"
   },
-  \"receipt_items\": [
+  "receipt_items": [
     {
-      \"raw_name\": string,
-      \"normalized_name\": string,
-      \"quantity\": number | null,
-      \"unit\": string | null,
-      \"unit_price\": number | null,
-      \"total_price\": number | null,
-      \"confidence_score\": number
+      "raw_name": string,
+      "normalized_name": string,
+      "quantity": number | null,
+      "unit": string | null,
+      "unit_price": number | null,
+      "total_price": number | null,
+      "confidence_score": number
     }
   ]
 }
 
 Only return JSON.`;
 
-function safeParse(text: string) {
-  const cleaned = (text ?? "").trim();
-  if (!cleaned) throw new Error("Empty response from model");
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
+function getEnv(name: string): string {
+  return (Deno.env.get(name) ?? "").trim();
+}
+
+function compactDetails(details: unknown, maxLen = 300): string | null {
+  if (details == null) return null;
+  if (typeof details === "string") return details.slice(0, maxLen);
   try {
-    return JSON.parse(cleaned);
+    return JSON.stringify(details).slice(0, maxLen);
   } catch {
-    // continue
+    return null;
   }
+}
 
-  const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-  const candidate = match?.[1]?.trim() ?? cleaned;
-
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    // continue
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
-
-  return JSON.parse(jsonrepair(candidate));
+  return btoa(binary);
 }
 
 function asStringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
@@ -171,161 +211,442 @@ function normalizeModelOutput(modelOutput: unknown) {
   return { receipt, receipt_items };
 }
 
-Deno.serve(async () => {
-  const url = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
+function supabaseHeaders(serviceRoleKey: string) {
+  return {
+    apikey: serviceRoleKey,
+    authorization: `Bearer ${serviceRoleKey}`,
+  };
+}
 
-  if (!url || !serviceRoleKey) {
-    return new Response("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY", {
-      status: 500,
-    });
-  }
-  if (!geminiKey) {
-    return new Response("Missing GEMINI_API_KEY", { status: 500 });
-  }
+async function restFetch(
+  url: string,
+  serviceRoleKey: string,
+  init: RequestInit = {},
+) {
+  const headers = new Headers(init.headers);
+  const auth = supabaseHeaders(serviceRoleKey);
+  headers.set("apikey", auth.apikey);
+  headers.set("authorization", auth.authorization);
+  headers.set("accept", "application/json");
+  return await fetch(url, { ...init, headers });
+}
 
-  const supabase = createClient(url, serviceRoleKey);
-
-  // Find one queued job.
-  const { data: job, error: jobError } = await supabase
-    .from("receipt_scan_jobs")
-    .select("id,user_id,image_path,attempt_count")
-    .eq("status", "queued")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (jobError) {
-    return new Response(jobError.message, { status: 500 });
+async function restJsonOrText(res: Response) {
+  const text = await res.text().catch(() => "");
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
   }
-  if (!job) {
-    return new Response("No queued jobs", { status: 200 });
-  }
+}
 
-  // Attempt to claim the job.
-  const { data: claimed, error: claimError } = await supabase
-    .from("receipt_scan_jobs")
-    .update({
-      status: "processing",
-      attempt_count: (job.attempt_count ?? 0) + 1,
-    })
-    .eq("id", job.id)
-    .eq("status", "queued")
-    .select("id,user_id,image_path")
-    .maybeSingle();
+async function storageDownload(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  bucket: string,
+  path: string,
+) {
+  const encodedPath = path
+    .split("/")
+    .map((s) => encodeURIComponent(s))
+    .join("/");
+  const url = `${supabaseUrl}/storage/v1/object/${bucket}/${encodedPath}`;
+  return await restFetch(url, serviceRoleKey, { method: "GET" });
+}
 
-  if (claimError) {
-    return new Response(claimError.message, { status: 500 });
-  }
-  if (!claimed) {
-    return new Response("Job already claimed", { status: 200 });
-  }
+async function markJobStatus(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  jobId: string,
+  status: "error" | "done",
+  fields: Record<string, unknown>,
+) {
+  const url = new URL(`${supabaseUrl}/rest/v1/receipt_scan_jobs`);
+  url.searchParams.set("id", `eq.${jobId}`);
+  await restFetch(url.toString(), serviceRoleKey, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+      prefer: "return=minimal",
+    },
+    body: JSON.stringify({ status, ...fields }),
+  });
+}
+
+Deno.serve(async (req) => {
+  const debug = getEnv("DEBUG") === "1";
 
   try {
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from(RECEIPT_BUCKET)
-      .download(claimed.image_path);
+    const supabaseUrl = getEnv("SUPABASE_URL");
+    const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const geminiKey = getEnv("GEMINI_API_KEY");
 
-    if (downloadError || !fileData) {
-      throw new Error(downloadError?.message ?? "Failed to download image");
-    }
-
-    const arrayBuffer = await fileData.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-
-    const ai = new GoogleGenAI({ apiKey: geminiKey });
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      config: {
-        temperature: 0,
-        responseMimeType: "application/json",
-      },
-      contents: [
+    if (!supabaseUrl || !serviceRoleKey) {
+      return jsonResponse(
         {
-          role: "user",
-          parts: [
-            {
-              inlineData: {
-                // Storage doesn't preserve original mime type. Assume jpeg.
-                mimeType: "image/jpeg",
-                data: base64,
-              },
-            },
-            { text: RECEIPT_PARSE_PROMPT },
-          ],
+          ok: false,
+          stage: "env",
+          error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
         },
-      ],
-    });
-
-    const parsed = safeParse(response.text ?? "");
-    const normalized = normalizeModelOutput(parsed);
-
-    const receiptId = crypto.randomUUID();
-
-    const { error: receiptInsertError } = await supabase
-      .from("receipts")
-      .insert({
-        id: receiptId,
-        user_id: claimed.user_id,
-        image_url: claimed.image_path,
-        store_name: normalized.receipt.store_name,
-        total_amount: normalized.receipt.total_amount,
-        currency: normalized.receipt.currency,
-        purchased_at: normalized.receipt.purchased_at,
-        ocr_status: normalized.receipt.ocr_status,
-        ocr_raw_text: normalized.receipt.ocr_raw_text,
-      });
-
-    if (receiptInsertError) {
-      throw new Error(receiptInsertError.message);
+        500,
+      );
     }
 
-    if (normalized.receipt_items.length > 0) {
-      const items = normalized.receipt_items.map((it) => ({
-        receipt_id: receiptId,
-        raw_name: it.raw_name,
-        normalized_name: it.normalized_name,
-        quantity: it.quantity,
-        unit: it.unit,
-        unit_price: it.unit_price,
-        total_price: it.total_price,
-        confidence_score: it.confidence_score,
-      }));
+    if (serviceRoleKey.startsWith("sb_publishable_")) {
+      return jsonResponse(
+        {
+          ok: false,
+          stage: "env",
+          error:
+            "SUPABASE_SERVICE_ROLE_KEY looks like a publishable key (sb_publishable_*). Use the secret service role key (sb_secret_*).",
+        },
+        500,
+      );
+    }
 
-      const { error: itemsError } = await supabase
-        .from("receipt_items")
-        .insert(items);
+    if (!geminiKey) {
+      return jsonResponse(
+        { ok: false, stage: "env", error: "Missing GEMINI_API_KEY" },
+        500,
+      );
+    }
 
-      if (itemsError) {
-        throw new Error(itemsError.message);
+    // Parse request body (optional): { jobId }
+    let requestedJobId: string | null = null;
+    try {
+      const ct = req.headers.get("content-type") ?? "";
+      if (ct.includes("application/json")) {
+        const body = (await req
+          .json()
+          .catch(() => null)) as WorkerRequestBody | null;
+        if (body?.jobId && typeof body.jobId === "string")
+          requestedJobId = body.jobId;
+      }
+    } catch {
+      // ignore body parse issues
+    }
+
+    // Select one queued job (or a specific jobId)
+    // If jobId is provided, fetch it regardless of status first, so we can
+    // report the current status (helps debug races).
+    const selectUrl = new URL(`${supabaseUrl}/rest/v1/receipt_scan_jobs`);
+    selectUrl.searchParams.set(
+      "select",
+      "id,user_id,image_path,attempt_count,status,error_message,receipt_id",
+    );
+    if (requestedJobId) {
+      selectUrl.searchParams.set("id", `eq.${requestedJobId}`);
+      selectUrl.searchParams.set("limit", "1");
+    } else {
+      selectUrl.searchParams.set("status", "eq.queued");
+      selectUrl.searchParams.set("order", "created_at.asc");
+      selectUrl.searchParams.set("limit", "1");
+    }
+
+    const selectRes = await restFetch(selectUrl.toString(), serviceRoleKey, {
+      method: "GET",
+    });
+    if (!selectRes.ok) {
+      const body = await restJsonOrText(selectRes);
+      const bodySnippet = compactDetails(body);
+      return jsonResponse(
+        {
+          ok: false,
+          stage: "job_select",
+          error: `Job select failed (${selectRes.status})${bodySnippet ? `: ${bodySnippet}` : ""}`,
+          details: debug ? body : undefined,
+        },
+        500,
+      );
+    }
+
+    const jobs = (await selectRes.json().catch(() => [])) as Array<
+      ReceiptScanJob & {
+        status?: unknown;
+        error_message?: unknown;
+        receipt_id?: unknown;
+      }
+    >;
+    const job = Array.isArray(jobs) ? jobs[0] : null;
+
+    if (!job) {
+      if (requestedJobId) {
+        return jsonResponse(
+          {
+            ok: false,
+            stage: "job_select",
+            error: "Requested job not found",
+          },
+          404,
+        );
+      }
+      return jsonResponse(
+        { ok: true, stage: "idle", message: "No queued jobs" },
+        200,
+      );
+    }
+
+    if (requestedJobId) {
+      const status = asString(job.status);
+      if (status && status !== "queued") {
+        const errorMessage = asString(job.error_message);
+        const receiptId = asString(job.receipt_id);
+        return jsonResponse(
+          {
+            ok: false,
+            stage: "job_select",
+            error: `Requested job is not queued (status=${status})${errorMessage ? `: ${errorMessage}` : ""}`,
+            receiptId,
+          },
+          409,
+        );
       }
     }
 
-    const { error: doneError } = await supabase
-      .from("receipt_scan_jobs")
-      .update({ status: "done", receipt_id: receiptId, error_message: null })
-      .eq("id", claimed.id);
+    // Claim job (transition queued -> processing)
+    const claimUrl = new URL(`${supabaseUrl}/rest/v1/receipt_scan_jobs`);
+    claimUrl.searchParams.set("id", `eq.${job.id}`);
+    claimUrl.searchParams.set("status", "eq.queued");
 
-    if (doneError) {
-      throw new Error(doneError.message);
+    const claimRes = await restFetch(claimUrl.toString(), serviceRoleKey, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        status: "processing",
+        attempt_count: (job.attempt_count ?? 0) + 1,
+      }),
+    });
+
+    if (!claimRes.ok) {
+      const body = await restJsonOrText(claimRes);
+      const bodySnippet = compactDetails(body);
+      return jsonResponse(
+        {
+          ok: false,
+          stage: "job_claim",
+          error: `Job claim failed (${claimRes.status})${bodySnippet ? `: ${bodySnippet}` : ""}`,
+          details: debug ? body : undefined,
+        },
+        500,
+      );
     }
 
-    return new Response(JSON.stringify({ ok: true, jobId: claimed.id }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    const claimedArr = (await claimRes.json().catch(() => [])) as ClaimedJob[];
+    const claimed = Array.isArray(claimedArr) ? claimedArr[0] : null;
+
+    if (!claimed) {
+      return jsonResponse(
+        { ok: true, stage: "job_claim", message: "Job already claimed" },
+        200,
+      );
+    }
+
+    try {
+      // Download image from private bucket
+      const downloadRes = await storageDownload(
+        supabaseUrl,
+        serviceRoleKey,
+        RECEIPT_BUCKET,
+        claimed.image_path,
+      );
+
+      if (!downloadRes.ok) {
+        const body = await restJsonOrText(downloadRes);
+        const bodySnippet = compactDetails(body);
+        throw new Error(
+          `Failed to download image (${downloadRes.status})${bodySnippet ? `: ${bodySnippet}` : ""}`,
+        );
+      }
+
+      const bytes = new Uint8Array(await downloadRes.arrayBuffer());
+      const base64 = uint8ToBase64(bytes);
+
+      // Gemini generateContent
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`;
+      const geminiRes = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          generationConfig: {
+            temperature: 0,
+            responseMimeType: "application/json",
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  inlineData: {
+                    // Storage doesn't preserve original mime type. Assume jpeg.
+                    mimeType: "image/jpeg",
+                    data: base64,
+                  },
+                },
+                { text: RECEIPT_PARSE_PROMPT },
+              ],
+            },
+          ],
+        }),
+      });
+
+      const geminiJson = (await geminiRes
+        .json()
+        .catch(() => null)) as GeminiGenerateContentResponse | null;
+
+      if (!geminiRes.ok) {
+        const message =
+          geminiJson?.error?.message ??
+          `Gemini request failed (${geminiRes.status})`;
+        throw new Error(message);
+      }
+
+      const text =
+        geminiJson?.candidates?.[0]?.content?.parts
+          ?.map((p) => p.text ?? "")
+          .join("") ?? "";
+
+      const parsed = JSON.parse(text.trim());
+      const normalized = normalizeModelOutput(parsed);
+
+      const receiptId = crypto.randomUUID();
+
+      // Insert receipt
+      const receiptInsertRes = await restFetch(
+        `${supabaseUrl}/rest/v1/receipts`,
+        serviceRoleKey,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            prefer: "return=minimal",
+          },
+          body: JSON.stringify({
+            id: receiptId,
+            user_id: claimed.user_id,
+            image_url: claimed.image_path,
+            store_name: normalized.receipt.store_name,
+            total_amount: normalized.receipt.total_amount,
+            currency: normalized.receipt.currency,
+            purchased_at: normalized.receipt.purchased_at,
+            ocr_status: normalized.receipt.ocr_status,
+            ocr_raw_text: normalized.receipt.ocr_raw_text,
+          }),
+        },
+      );
+
+      if (!receiptInsertRes.ok) {
+        const body = await restJsonOrText(receiptInsertRes);
+        const bodySnippet = compactDetails(body);
+        throw new Error(
+          `Failed to insert receipt (${receiptInsertRes.status})${bodySnippet ? `: ${bodySnippet}` : ""}`,
+        );
+      }
+
+      // Insert items
+      if (normalized.receipt_items.length > 0) {
+        const items = normalized.receipt_items.map((it) => ({
+          receipt_id: receiptId,
+          raw_name: it.raw_name,
+          normalized_name: it.normalized_name,
+          quantity: it.quantity,
+          unit: it.unit,
+          unit_price: it.unit_price,
+          total_price: it.total_price,
+          confidence_score: it.confidence_score,
+        }));
+
+        const itemsInsertRes = await restFetch(
+          `${supabaseUrl}/rest/v1/receipt_items`,
+          serviceRoleKey,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              prefer: "return=minimal",
+            },
+            body: JSON.stringify(items),
+          },
+        );
+
+        if (!itemsInsertRes.ok) {
+          const body = await restJsonOrText(itemsInsertRes);
+          const bodySnippet = compactDetails(body);
+          throw new Error(
+            `Failed to insert receipt items (${itemsInsertRes.status})${bodySnippet ? `: ${bodySnippet}` : ""}`,
+          );
+        }
+      }
+
+      await markJobStatus(supabaseUrl, serviceRoleKey, claimed.id, "done", {
+        receipt_id: receiptId,
+        error_message: null,
+      });
+
+      return jsonResponse({ ok: true, jobId: claimed.id, receiptId }, 200);
+    } catch (e) {
+      const err = e instanceof Error ? e : new Error("Job failed");
+      const message = err.message || "Job failed";
+
+      console.error(
+        JSON.stringify({
+          stage: "run",
+          error: message,
+          stack: debug ? err.stack : undefined,
+          jobId: claimed.id,
+        }),
+      );
+
+      try {
+        await markJobStatus(supabaseUrl, serviceRoleKey, claimed.id, "error", {
+          error_message: message,
+        });
+      } catch (updateErr) {
+        const uerr =
+          updateErr instanceof Error
+            ? updateErr
+            : new Error("Failed to update job error status");
+        console.error(
+          JSON.stringify({
+            stage: "job_mark_error",
+            error: uerr.message,
+            stack: debug ? uerr.stack : undefined,
+            jobId: claimed.id,
+          }),
+        );
+      }
+
+      return jsonResponse(
+        {
+          ok: false,
+          stage: "run",
+          error: message,
+          stack: debug ? err.stack : undefined,
+          jobId: claimed.id,
+        },
+        500,
+      );
+    }
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Job failed";
-
-    await supabase
-      .from("receipt_scan_jobs")
-      .update({ status: "error", error_message: message })
-      .eq("id", claimed.id);
-
-    return new Response(JSON.stringify({ ok: false, error: message }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    const err = e instanceof Error ? e : new Error("Fatal error");
+    console.error(
+      JSON.stringify({
+        stage: "fatal",
+        error: err.message,
+        stack: debug ? err.stack : undefined,
+      }),
+    );
+    return jsonResponse(
+      {
+        ok: false,
+        stage: "fatal",
+        error: err.message,
+        stack: debug ? err.stack : undefined,
+      },
+      500,
+    );
   }
 });

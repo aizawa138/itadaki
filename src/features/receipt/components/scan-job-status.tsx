@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/src/components/ui/button/button";
 import Image from "next/image";
 
@@ -16,6 +16,8 @@ type JobStatusResponse = {
 
 export default function ScanJobStatus({ jobId }: { jobId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const enqueueError = searchParams.get("enqueueError");
   const [data, setData] = useState<JobStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,9 +83,14 @@ export default function ScanJobStatus({ jobId }: { jobId: string }) {
 
   const done = data.status === "done";
   const failed = data.status === "error";
+  const enqueueErrorText = enqueueError ? enqueueError.slice(0, 300) : null;
 
   return (
     <div className="space-y-4">
+      {enqueueErrorText ? (
+        <p className="text-sm text-destructive">{enqueueErrorText}</p>
+      ) : null}
+
       <div>
         <p className="text-sm text-muted-foreground">Job ID</p>
         <p className="text-sm font-mono break-all">{data.id}</p>
