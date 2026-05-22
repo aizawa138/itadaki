@@ -120,8 +120,7 @@ async function tryGetInvokeErrorBody(
   }
 }
 
-export async function enqueueReceiptScanJobAction(
-  _prevState: EnqueueReceiptScanJobState,
+export async function enqueueReceiptScanJobFromFormData(
   formData: FormData,
 ): Promise<EnqueueReceiptScanJobState> {
   const { imagePath, error } = await uploadReceiptImage(formData);
@@ -232,4 +231,11 @@ export async function enqueueReceiptScanJobAction(
   }
 
   return { jobId, error: null };
+}
+
+export async function enqueueReceiptScanJobAction(
+  _prevState: EnqueueReceiptScanJobState,
+  formData: FormData,
+): Promise<EnqueueReceiptScanJobState> {
+  return enqueueReceiptScanJobFromFormData(formData);
 }
