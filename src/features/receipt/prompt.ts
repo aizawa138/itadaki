@@ -12,6 +12,7 @@ STRICT RULES:
 5. confidence_score must be between 0 and 1
 6. Monetary values must be numbers only
 7. Parse timestamps as ISO 8601 when possible
+8. Do not include items which cannot be used for recipes
 
 RECEIPT RULES
 
