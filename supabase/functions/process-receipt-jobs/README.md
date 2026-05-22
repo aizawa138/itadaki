@@ -1,6 +1,13 @@
 # process-receipt-jobs (Supabase Edge Function)
 
-Processes queued receipt scan jobs.
+Processes queued receipt scan jobs and syncs parsed items into `pantry_items`.
+
+## Database setup
+
+Run these SQL files in the Supabase SQL editor (if not already applied):
+
+- `supabase/receipt-scan-jobs.sql`
+- `supabase/pantry-items.sql`
 
 ## Deploy
 

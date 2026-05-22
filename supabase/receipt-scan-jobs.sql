@@ -37,28 +37,32 @@ grant select, insert, update, delete on table public.receipt_scan_jobs to authen
 grant usage on schema public to service_role;
 grant select, insert, update, delete on table public.receipt_scan_jobs to service_role;
 
--- Worker also inserts into receipts/receipt_items
+-- Worker also inserts into receipts/receipt_items and pantry_items
 grant select, insert, update, delete on table public.receipts to service_role;
 grant select, insert, update, delete on table public.receipt_items to service_role;
+grant select, insert, update, delete on table public.pantry_items to service_role;
 
 alter table public.receipt_scan_jobs enable row level security;
 
 -- Users can see only their jobs
-create policy if not exists receipt_scan_jobs_select_own
+drop policy if exists receipt_scan_jobs_select_own on public.receipt_scan_jobs;
+create policy receipt_scan_jobs_select_own
 on public.receipt_scan_jobs
 for select
 to authenticated
 using (user_id = auth.uid());
 
 -- Users can create jobs only for themselves
-create policy if not exists receipt_scan_jobs_insert_own
+drop policy if exists receipt_scan_jobs_insert_own on public.receipt_scan_jobs;
+create policy receipt_scan_jobs_insert_own
 on public.receipt_scan_jobs
 for insert
 to authenticated
 with check (user_id = auth.uid());
 
 -- Optional: allow users to cancel/delete their own jobs
-create policy if not exists receipt_scan_jobs_delete_own
+drop policy if exists receipt_scan_jobs_delete_own on public.receipt_scan_jobs;
+create policy receipt_scan_jobs_delete_own
 on public.receipt_scan_jobs
 for delete
 to authenticated

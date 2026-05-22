@@ -8,7 +8,7 @@
 // - Picks one queued job (or a specific jobId)
 // - Downloads the image from Storage (private bucket)
 // - Calls Gemini to extract JSON
-// - Inserts into receipts + receipt_items
+// - Inserts into receipts + receipt_items + pantry_items
 // - Marks job done/error
 //
 // Deploy:
@@ -17,6 +17,8 @@
 //   supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... GEMINI_API_KEY=...
 // Optional:
 //   supabase secrets set DEBUG=1
+
+import { syncReceiptItemsToPantry } from "../_shared/sync-receipt-to-pantry.ts";
 
 const RECEIPT_BUCKET = "receipts";
 const MODEL = "gemini-2.5-flash";
@@ -546,18 +548,35 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Insert items
+      // Insert items and sync to pantry
       if (normalized.receipt_items.length > 0) {
-        const items = normalized.receipt_items.map((it) => ({
-          receipt_id: receiptId,
-          raw_name: it.raw_name,
-          normalized_name: it.normalized_name,
-          quantity: it.quantity,
-          unit: it.unit,
-          unit_price: it.unit_price,
-          total_price: it.total_price,
-          confidence_score: it.confidence_score,
-        }));
+        const itemsForPantry: Array<{
+          id: string;
+          normalized_name: string | null;
+          quantity: number | null;
+          unit: string | null;
+        }> = [];
+
+        const items = normalized.receipt_items.map((it) => {
+          const id = crypto.randomUUID();
+          itemsForPantry.push({
+            id,
+            normalized_name: it.normalized_name,
+            quantity: it.quantity,
+            unit: it.unit,
+          });
+          return {
+            id,
+            receipt_id: receiptId,
+            raw_name: it.raw_name,
+            normalized_name: it.normalized_name,
+            quantity: it.quantity,
+            unit: it.unit,
+            unit_price: it.unit_price,
+            total_price: it.total_price,
+            confidence_score: it.confidence_score,
+          };
+        });
 
         const itemsInsertRes = await restFetch(
           `${supabaseUrl}/rest/v1/receipt_items`,
@@ -579,6 +598,13 @@ Deno.serve(async (req) => {
             `Failed to insert receipt items (${itemsInsertRes.status})${bodySnippet ? `: ${bodySnippet}` : ""}`,
           );
         }
+
+        await syncReceiptItemsToPantry(
+          (url, init) => restFetch(url, serviceRoleKey, init),
+          supabaseUrl,
+          claimed.user_id,
+          itemsForPantry,
+        );
       }
 
       await markJobStatus(supabaseUrl, serviceRoleKey, claimed.id, "done", {
