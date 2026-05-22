@@ -2,11 +2,7 @@ import { fetchPantry } from "@/src/features/pantry/actions/fetch-pantry";
 import PantryCard from "@/src/features/pantry/components/pantry-card";
 import RecentReceipt from "@/src/features/pantry/components/recent-receipt";
 
-export default async function Pantry(props: {
-  searchParams: Promise<{ receiptPage?: string }>;
-}) {
-  const { receiptPage } = await props.searchParams;
-  const page = Math.max(1, Number(receiptPage) || 1);
+export default async function Pantry() {
   const pantryItems = await fetchPantry();
 
   return (
@@ -28,7 +24,7 @@ export default async function Pantry(props: {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          <RecentReceipt page={page} />
+          <RecentReceipt variant="preview" />
         </div>
       </div>
     </main>

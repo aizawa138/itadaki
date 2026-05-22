@@ -1,37 +1,65 @@
 import { createSupabaseServerClient } from "@/src/lib/supabase/server-client";
 
-export const RECEIPT_ITEMS_PAGE_SIZE = 5;
+export const RECEIPT_DAYS_PAGE_SIZE = 1;
+const PURCHASE_DAY_TIMEZONE = "Pacific/Auckland";
 
-export type ReceiptItemWithReceipt = {
+export type ReceiptItemSummary = {
   id: string;
   normalized_name: string | null;
   raw_name: string | null;
   quantity: number | null;
   unit: string | null;
-  created_at: string;
-  receipt_id: string | null;
   total_price: number | null;
-  receipts: {
-    id: string;
-    purchased_at: string | null;
-    store_name: string | null;
-    total_amount: number | null;
-    currency: string | null;
-  };
 };
 
-export type PaginatedReceiptItems = {
-  items: ReceiptItemWithReceipt[];
+export type ReceiptWithItems = {
+  id: string;
+  store_name: string | null;
+  purchased_at: string | null;
+  total_amount: number | null;
+  currency: string | null;
+  items: ReceiptItemSummary[];
+};
+
+export type ReceiptDayPage = {
+  purchaseDate: string;
+  receipts: ReceiptWithItems[];
+};
+
+export type PaginatedReceiptDays = {
+  day: ReceiptDayPage | null;
   page: number;
-  pageSize: number;
-  totalCount: number;
+  totalDays: number;
   totalPages: number;
 };
 
-export default async function fetchPaginatedReceiptItems(
+function getPurchaseDayBounds(purchaseDate: string) {
+  const start = `${purchaseDate}T00:00:00+12:00`;
+  const anchor = new Date(`${purchaseDate}T12:00:00+12:00`);
+  anchor.setDate(anchor.getDate() + 1);
+  const nextDate = anchor.toLocaleDateString("en-CA", {
+    timeZone: PURCHASE_DAY_TIMEZONE,
+  });
+  const end = `${nextDate}T00:00:00+12:00`;
+  return { start, end };
+}
+
+function mapReceiptItems(
+  items: ReceiptItemSummary[] | null | undefined,
+): ReceiptItemSummary[] {
+  return (items ?? []).map((item) => ({
+    id: item.id,
+    normalized_name: item.normalized_name,
+    raw_name: item.raw_name,
+    quantity: item.quantity,
+    unit: item.unit,
+    total_price: item.total_price,
+  }));
+}
+
+export default async function fetchPaginatedReceiptDay(
   page = 1,
-  pageSize = RECEIPT_ITEMS_PAGE_SIZE,
-): Promise<PaginatedReceiptItems> {
+): Promise<PaginatedReceiptDays> {
   const supabase = await createSupabaseServerClient();
 
   const {
@@ -42,80 +70,99 @@ export default async function fetchPaginatedReceiptItems(
     throw new Error("User not authenticated");
   }
 
-  const { count, error: countError } = await supabase
-    .from("receipt_items")
-    .select("id, receipts!inner(user_id)", { count: "exact", head: true })
-    .eq("receipts.user_id", user.id);
+  const { data: totalDaysRaw, error: countError } = await supabase.rpc(
+    "count_distinct_purchase_days",
+  );
 
   if (countError) {
     throw countError;
   }
 
-  const totalCount = count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-  const from = (safePage - 1) * pageSize;
-  const to = from + pageSize - 1;
+  const totalDays = Number(totalDaysRaw ?? 0);
+  const totalPages = Math.max(1, totalDays);
+  const safePage =
+    totalDays === 0 ? 1 : Math.min(Math.max(1, page), totalPages);
+
+  if (totalDays === 0) {
+    return {
+      day: null,
+      page: 1,
+      totalDays: 0,
+      totalPages: 1,
+    };
+  }
+
+  const { data: purchaseDateRaw, error: dayError } = await supabase.rpc(
+    "get_distinct_purchase_day_at_page",
+    {
+      p_page: safePage,
+      p_page_size: RECEIPT_DAYS_PAGE_SIZE,
+    },
+  );
+
+  if (dayError) {
+    throw dayError;
+  }
+
+  const purchaseDate = purchaseDateRaw as string | null;
+  if (!purchaseDate) {
+    return {
+      day: null,
+      page: safePage,
+      totalDays,
+      totalPages,
+    };
+  }
+
+  const { start, end } = getPurchaseDayBounds(purchaseDate);
 
   const { data, error } = await supabase
-    .from("receipt_items")
+    .from("receipts")
     .select(
       `
       id,
-      normalized_name,
-      raw_name,
-      quantity,
-      unit,
-      created_at,
-      receipt_id,
-      total_price,
-      receipts!inner (
+      purchased_at,
+      store_name,
+      total_amount,
+      currency,
+      receipt_items (
         id,
-        purchased_at,
-        store_name,
-        total_amount,
-        currency,
-        user_id
+        normalized_name,
+        raw_name,
+        quantity,
+        unit,
+        total_price
       )
     `,
     )
-    .eq("receipts.user_id", user.id)
-    .order("purchased_at", { ascending: false, foreignTable: "receipts" })
-    .order("created_at", { ascending: false })
-    .range(from, to);
+    .eq("user_id", user.id)
+    .gte("purchased_at", start)
+    .lt("purchased_at", end)
+    .order("purchased_at", { ascending: false })
+    .order("created_at", { foreignTable: "receipt_items", ascending: false });
 
   if (error) {
     throw error;
   }
 
-  const items: ReceiptItemWithReceipt[] = (data ?? []).map((row) => {
-    const receipt = Array.isArray(row.receipts)
-      ? row.receipts[0]
-      : row.receipts;
-    return {
-      id: row.id,
-      normalized_name: row.normalized_name,
-      raw_name: row.raw_name,
-      quantity: row.quantity,
-      unit: row.unit,
-      created_at: row.created_at,
-      receipt_id: row.receipt_id,
-      total_price: row.total_price,
-      receipts: {
-        id: receipt.id,
-        purchased_at: receipt.purchased_at,
-        store_name: receipt.store_name,
-        total_amount: receipt.total_amount,
-        currency: receipt.currency,
-      },
-    };
-  });
+  const receipts: ReceiptWithItems[] = (data ?? []).map((row) => ({
+    id: row.id,
+    store_name: row.store_name,
+    purchased_at: row.purchased_at,
+    total_amount: row.total_amount,
+    currency: row.currency,
+    items: mapReceiptItems(
+      row.receipt_items as ReceiptItemSummary[] | null | undefined,
+    ),
+  }));
 
   return {
-    items,
+    day: {
+      purchaseDate,
+      receipts,
+    },
     page: safePage,
-    pageSize,
-    totalCount,
+    totalDays,
     totalPages,
   };
 }

@@ -8,7 +8,7 @@ export default async function Receipt(props: {
 
   return (
     <main className="flex flex-col mx-auto w-full max-w-4xl px-6 mt-10">
-      <RecentReceipt page={page} />
+      <RecentReceipt page={page} variant="full" />
     </main>
   );
 }

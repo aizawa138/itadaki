@@ -21,7 +21,7 @@ export default function RecentReceiptPagination({
   return (
     <nav
       className="flex items-center justify-between gap-4 pt-4 border-t border-gray-300"
-      aria-label="Receipt items pagination"
+      aria-label="Receipt days pagination"
     >
       {prevHref ? (
         <Button variant="outline" size="sm" asChild>
@@ -33,7 +33,7 @@ export default function RecentReceiptPagination({
         </Button>
       )}
       <p className="text-sm text-gray-500">
-        Page {page} of {totalPages}
+        Day {page} of {totalPages}
       </p>
       {nextHref ? (
         <Button variant="outline" size="sm" asChild>
