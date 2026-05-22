@@ -1,6 +1,12 @@
 "use server";
 
+import {
+  syncReceiptItemsToPantry,
+  type ReceiptItemForPantrySync,
+} from "@/src/features/pantry/services/sync-receipt-to-pantry";
+
 import { createSupabaseServerClient } from "@/src/lib/supabase/server-client";
+
 import type { ReceiptItemInsert, ReceiptInsert, ReceiptProps } from "../types";
 
 export async function saveReceipt(receipt: ReceiptProps, imagePath: string) {
@@ -18,13 +24,18 @@ export async function saveReceipt(receipt: ReceiptProps, imagePath: string) {
 
   const receiptInsert: ReceiptInsert = {
     ...receipt.receipt,
+
     id: receiptId,
+
     user_id: user.id,
+
     image_url: imagePath,
   };
 
   const { error: receiptError } = await supabase
+
     .from("receipts")
+
     .insert(receiptInsert);
 
   if (receiptError) {
@@ -32,15 +43,24 @@ export async function saveReceipt(receipt: ReceiptProps, imagePath: string) {
   }
 
   if (receipt.receipt_items.length > 0) {
+    const itemsForPantry: ReceiptItemForPantrySync[] = [];
     const receiptItemsInsert: ReceiptItemInsert[] = receipt.receipt_items.map(
-      (item) => ({
-        ...item,
-        receipt_id: receiptId,
-      }),
+      (item) => {
+        const id = crypto.randomUUID();
+        itemsForPantry.push({
+          id,
+          normalized_name: item.normalized_name ?? null,
+          quantity: item.quantity ?? null,
+          unit: item.unit ?? null,
+        });
+        return { ...item, id, receipt_id: receiptId };
+      },
     );
 
     const { error: receiptItemError } = await supabase
+
       .from("receipt_items")
+
       .insert(receiptItemsInsert);
 
     if (receiptItemError) {
@@ -48,6 +68,8 @@ export async function saveReceipt(receipt: ReceiptProps, imagePath: string) {
         receiptItemError.message ?? "Failed to save receipt items",
       );
     }
+
+    await syncReceiptItemsToPantry(supabase, user.id, itemsForPantry);
   }
 
   return receiptId;
