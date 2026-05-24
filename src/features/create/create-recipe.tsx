@@ -77,10 +77,9 @@ export default function CreateRecipe() {
           size="default"
           className="w-full transition"
           disabled={!modeSelected}
+          asChild
         >
-          <Link href={modeSelected && isReceipt ? "/scan" : "/pantry"}>
-            Create Recipe
-          </Link>
+          <Link href={isReceipt ? "/scan" : "/pantry"}>Create Recipe</Link>
         </Button>
       </DialogContent>
     </Dialog>
